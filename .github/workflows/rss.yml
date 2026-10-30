@@ -28,5 +28,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
+          name: pallada-rss-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: actions/deploy-pages@v4
         id: deployment
+        with:
+          artifact_name: pallada-rss-${{ github.run_id }}-${{ github.run_attempt }}
