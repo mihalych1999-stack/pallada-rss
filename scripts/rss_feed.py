@@ -78,7 +78,7 @@ def build_feed(articles, ledger=None, limit=100, image_overrides=None):
                      'contentSha256': hashlib.sha256(body.encode()).hexdigest(), 'issues': issues})
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:content="' + CONTENT +
            '"><channel><title>Паллада — строительство и инженерные системы</title><link>' + SITE +
-           '</link><language>ru</language><description>Полные статьи Паллады; локальный образец RSS для Дзена.</description>' +
+           '</link><language>ru</language><description>Полные статьи с сайта Паллады.</description>' +
            '\n'.join(item_xml) + '</channel></rss>\n').encode()
     parsed = ET.fromstring(xml)
     if len(parsed.findall('./channel/item')) != len(rows):
