@@ -15,6 +15,9 @@ import hashlib
 import html
 import json
 import re
+import time
+import http.client
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -49,10 +52,19 @@ def canonical_url(value):
 
 def fetch(url):
     request = urllib.request.Request(url, headers={'User-Agent': 'PalladaRSSPreview/1.0'})
-    with urllib.request.urlopen(request, timeout=25) as response:
-        if urlsplit(response.geturl()).scheme != 'https':
-            raise ValueError('insecure_redirect')
-        return response.read()
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=25) as response:
+                if urlsplit(response.geturl()).scheme != 'https':
+                    raise ValueError('insecure_redirect')
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code not in {500, 502, 503, 504} or attempt == 2:
+                raise
+        except (TimeoutError, ConnectionError, urllib.error.URLError, http.client.IncompleteRead):
+            if attempt == 2:
+                raise
+        time.sleep(attempt + 1)
 
 
 @dataclass
