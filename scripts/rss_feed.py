@@ -123,12 +123,46 @@ def live_articles(limit, ledger):
                            'publishedAtRss': item.findtext('pubDate', ''),
                            'rssDescription': item.findtext('description', ''),
                            'imageUrl': enclosure.get('url', '') if enclosure is not None else ''})
-    # Current top /novosti must agree with Tilda discovery feed before building.
-    compare = min(10, len(news_urls), len(candidates))
-    if compare < 10 or news_urls[:compare] != [a['url'] for a in candidates[:compare]]:
+    # Ordinary-page RSS excludes native Feeds posts. Preserve its consistency
+    # gate for the ordinary subset; the visible news order joins both routes.
+    ordinary = [u for u in news_urls if '/novosti/' in u]
+    compare = min(10, len(ordinary), len(candidates))
+    if compare < 10 or ordinary[:compare] != [a['url'] for a in candidates[:compare]]:
         raise ValueError('live_rss_and_novosti_first10_disagree')
-    selected, _ = select_articles(candidates, ledger, limit)
-    return [article_from_page(a['url'], a, fetch(a['url'])) for a in selected], {
+    by_url = {a['url']: a for a in candidates}
+    cache = {}
+    merged = []
+    for source in news_urls:
+        if '/tpost/' not in source:
+            if source not in by_url:
+                raise ValueError('ordinary_news_missing_from_rss: ' + source)
+            merged.append(by_url[source])
+            continue
+        raw = fetch(source)
+        cache[source] = raw
+        nodes = list(Tree(raw.decode()).root.walk())
+        metadata = []
+        for n in nodes:
+            if n.tag == 'script' and n.attrs.get('type') == 'application/ld+json':
+                try:
+                    value = json.loads(''.join(c for c in n.children if isinstance(c, str)))
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(value, dict) and value.get('@type') == 'Article' and value.get('mainEntityOfPage') == source:
+                    metadata.append(value)
+        if len(metadata) != 1:
+            raise ValueError('unique_native_article_metadata_required: ' + source)
+        data = metadata[0]
+        published = datetime.fromisoformat(data['datePublished'])
+        if published.tzinfo is None:
+            raise ValueError('native_publication_timezone_missing')
+        merged.append({'url': source, 'title': data['headline'], 'rssGuid': source,
+                       'publishedAtRss': format_datetime(published),
+                       'rssDescription': data.get('description', ''), 'imageUrl': data['image']})
+        if len(merged) >= limit + len(published_exclusions(ledger)):
+            break
+    selected, _ = select_articles(merged, ledger, limit)
+    return [article_from_page(a['url'], a, cache[a['url']] if a['url'] in cache else fetch(a['url'])) for a in selected], {
         'rssSha256': hashlib.sha256(rss_bytes).hexdigest(),
         'newsSha256': hashlib.sha256(news_bytes).hexdigest(), 'source': 'live_public_read_only'}
 
