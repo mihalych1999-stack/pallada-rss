@@ -41,7 +41,7 @@ def canonical_url(value):
     parts = urlsplit(str(value))
     if parts.scheme != 'https' or parts.netloc != 'pallada-n.ru':
         raise ValueError('foreign_or_noncanonical_source_url: ' + str(value))
-    if not re.fullmatch(r'/novosti/[a-z0-9][a-z0-9-]*', parts.path):
+    if not re.fullmatch(r'/(?:novosti|tpost)/[a-z0-9][a-z0-9-]*', parts.path):
         raise ValueError('article_route_required: ' + str(value))
     if re.fullmatch(r'/novosti/\d+', parts.path):
         raise ValueError('pagination_is_not_article')
