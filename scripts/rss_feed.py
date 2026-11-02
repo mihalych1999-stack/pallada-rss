@@ -95,6 +95,38 @@ def build_feed(articles, ledger=None, limit=100, image_overrides=None):
                                      'https://dzen.ru/help/ru/website/rss-modify.html']}
 
 
+def ordinary_news_prefix(tree, news_urls, fetcher):
+    """Keep the ten-ordinary-post check across existing numbered news pages."""
+    ordinary = [u for u in news_urls if '/novosti/' in u]
+    if len(ordinary) >= 10:
+        return ordinary
+    pages = {}
+    for node in tree.walk():
+        if node.tag != 'a':
+            continue
+        url = urljoin(SITE + '/novosti', node.attrs.get('href', ''))
+        parsed = urlsplit(url)
+        match = re.fullmatch(r'/novosti/(\d+)', parsed.path)
+        if (parsed.scheme == 'https' and parsed.netloc == 'pallada-n.ru' and
+                not parsed.query and not parsed.fragment and match and
+                int(match[1]) >= 2):
+            pages[int(match[1])] = url
+    for number in sorted(pages):
+        page = Tree(fetcher(pages[number]).decode()).root
+        for node in page.walk():
+            if node.tag != 'a':
+                continue
+            try:
+                source = canonical_url(urljoin(pages[number], node.attrs.get('href', '')))
+            except ValueError:
+                continue
+            if '/novosti/' in source and source not in ordinary:
+                ordinary.append(source)
+        if len(ordinary) >= 10:
+            break
+    return ordinary
+
+
 def live_articles(limit, ledger):
     rss_bytes = fetch(SITE + '/rss.xml')
     feed = ET.fromstring(rss_bytes)
@@ -125,7 +157,7 @@ def live_articles(limit, ledger):
                            'imageUrl': enclosure.get('url', '') if enclosure is not None else ''})
     # Ordinary-page RSS excludes native Feeds posts. Preserve its consistency
     # gate for the ordinary subset; the visible news order joins both routes.
-    ordinary = [u for u in news_urls if '/novosti/' in u]
+    ordinary = ordinary_news_prefix(tree, news_urls, fetch)
     compare = min(10, len(ordinary), len(candidates))
     if compare < 10 or ordinary[:compare] != [a['url'] for a in candidates[:compare]]:
         raise ValueError('live_rss_and_novosti_first10_disagree')
